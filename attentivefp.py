@@ -381,6 +381,7 @@ class Attentivefp(object):
         self.param.get_data()  #TODO : 待删除 修改utils中用json保存每个任务的type，labelclass等
         del_smiles = Attentivefp.pre_data(predict_smiles)
         predict_smiles = [smiles for smiles in predict_smiles if smiles not in del_smiles]
+        print(predict_smiles)
         graph_dict = graph(predict_smiles)
         fold = 5
         model_list = []

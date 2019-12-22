@@ -137,13 +137,11 @@ class Attentivefp(object):
                 Chem.AssignStereochemistry(mol, flagPossibleStereoCenters=True, force=True)
                 Chem.AssignAtomChiralTagsFromStructure(mol, -1)
                 remained_smiles.append(smiles)
-                canonical_smiles_list.append(Chem.MolToSmiles(Chem.MolFromSmiles(smiles), isomericSmiles=True))
-                kkk=1
+                canonical_smiles_list.append(Chem.MolToSmiles(Chem.MolFromSmiles(smiles), isomericSmiles=True))                
             except:
                 print('can not convert this {} smiles'.format(smiles))
                 del_smiles_list.append(smiles)
-                kkk=0
-                continue
+
         #print("number of successfully processed smiles: ", len(remained_smiles))
         return del_smiles_list
 
@@ -535,6 +533,7 @@ class cs286():
         self.param = Param(filename,'data/tang')
     def __call__(self, smile):
         mol = Chem.MolFromSmiles(smile)
+        
         if mol:
             self.param.get_data()  #TODO : 待删除 修改utils中用json保存每个任务的type，labelclass等
             del_smiles = Attentivefp.pre_data(smile)
@@ -687,11 +686,193 @@ class Singleprocessing():
        run them in the main process."""
     def __init__(self, scoring_function=None):
         self.scoring_function = scoring_function()
-    def __call__(self, smiles):
-        scores = [self.scoring_function(smile)[0] for smile in smiles]
-        scores1 = [self.scoring_function(smile)[1] for smile in smiles]
-        scores2 = [self.scoring_function(smile)[2] for smile in smiles]
-        return np.array(scores, dtype=np.float32), np.array(scores1, dtype=np.float32), np.array(scores2, dtype=np.float32)
+        self.batch_size = 64
+        self.epochs = 200
+        self.p_dropout = 0.2
+        self.fingerprint_dim = 128
+        self.weight_decay = 5  # also known as l2_regularization_lambda
+        self.learning_rate = 3.5
+        self.K = 2
+        self.T = 2
+        self.param = None
+        self.data_df = None
+        self.label_class = None
+        self.need_gpu = True
+        filename1="CB1"
+        filename2="solubility"
+        filename3="A_BBB_I"
+        filename4="T_hERG_II"
+        self.param1 = Param(filename1,'data/tang')
+        self.param2 = Param(filename2,'data/tang')
+        self.param3 = Param(filename3,'data/tang')
+        self.param4 = Param(filename4,'data/tang')
+        self.predict_path = 'best'
+        self.weighted = 'mean'
+        self.gpu = 'cpu'
+        # for key, value in kwargs.items():
+        #     if hasattr(self,key):
+        #         setattr(self,key,value)
+
+        if self.gpu == 'gpu':
+            os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+            os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
+            # cuda_aviable = torch.cuda.is_available()
+            # device = torch.device(0)
+    def __call__(self, smiles_0):
+        def softmax_(x, dim=1):
+            x = np.array(x, dtype=float)
+            x = x.swapaxes(dim, -1)
+            m = x.shape
+            x = np.reshape(x, (-1, np.size(x, -1)))
+            x = np.exp(x - np.reshape(np.max(x, axis=1), (-1, 1)))
+            x = x / np.reshape(np.sum(x, axis=1), (-1, 1))
+            x = np.reshape(x, m)
+            x = x.swapaxes(dim, -1)
+            return x
+
+        def softmax(x, dim=1):
+            x = np.array(x, dtype=float)
+            x = np.exp(x - np.expand_dims(np.max(x, axis=dim), dim))
+            x = x / np.expand_dims(np.sum(x, axis=dim), dim)
+            return x
+
+
+        def build_metrics_func(metric_name,need_max=True):
+            from sklearn.metrics import explained_variance_score, mean_absolute_error, mean_squared_error, \
+                mean_squared_log_error, r2_score, median_absolute_error, r2_score
+            from sklearn.metrics import accuracy_score, average_precision_score, f1_score, precision_score, recall_score, \
+                roc_auc_score,matthews_corrcoef
+            func = locals()[metric_name]
+            if metric_name in ['accuracy_score','f1_score','recall_score','precision_score','matthews_corrcoef']:
+                if need_max:
+                    return lambda x,y:func(x,np.argmax(y,axis=1))
+                else:
+                    return lambda x,y:func(x,np.round(y))
+
+
+            if metric_name in ['average_precision_score','roc_auc_score',]:
+                if need_max:
+                    return lambda x,y:func(x,y[:,1])
+                else:
+                    return lambda x,y:func(x,y)
+
+            return locals()[metric_name]
+        smiles=[]
+        empty_index=[]
+        for i in range(len(smiles_0)):
+            mol = Chem.MolFromSmiles(smiles_0[i])
+            if mol:
+                try:
+                    Chem.SanitizeMol(mol)
+                    Chem.DetectBondStereochemistry(mol, -1)
+                    Chem.AssignStereochemistry(mol, flagPossibleStereoCenters=True, force=True)
+                    Chem.AssignAtomChiralTagsFromStructure(mol, -1)
+                    smiles.append(smiles_0[i])
+                except:
+                    print('can not convert this {} smiles'.format(smiles_0[i]))
+                    empty_index.append(i)
+            else:
+                empty_index.append(i)
+            
+            # mol = Chem.MolFromSmiles(smiles_0[i])
+            # if mol:
+            #     smiles.append(smiles_0[i])
+            # else:
+            #     empty_index.append(i)
+        #print(smiles)
+        #print(empty_index)
+        self.param1.get_data()  #TODO : 待删除 修改utils中用json保存每个任务的type，labelclass等
+        self.param2.get_data()
+        del_smiles = Attentivefp.pre_data(smiles)
+        predict_smiles = [smile for smile in smiles if smile not in del_smiles]
+        #print(predict_smiles)
+        graph_dict = graph(smiles)
+        #print(graph_dict)
+        fold = 5
+        model_list1 = []
+        predict_list1 = []
+        model_list2 = []
+        predict_list2 = []
+        import json
+        with open('{}/{}/lr_weight.json'.format(self.predict_path,self.param1.name), 'r') as f1:
+            weight_dict1 = json.loads(f1.read())
+            coef_1 = np.array(weight_dict1['coef_'])
+            intercept_1 = np.array(weight_dict1['intercept_'])
+        with open('{}/{}/lr_weight.json'.format(self.predict_path,self.param2.name), 'r') as f2:
+            weight_dict2 = json.loads(f2.read())
+            coef_2 = np.array(weight_dict2['coef_'])
+            intercept_2 = np.array(weight_dict2['intercept_'])
+        for i in range(fold):
+            model_list1.append(torch.load('{}/{}/fold_{}.pt'.format(self.predict_path,self.param1.name, str(i),)))
+            predict_list1.append([])
+            model_list2.append(torch.load('{}/{}/fold_{}.pt'.format(self.predict_path,self.param2.name, str(i),)))
+            predict_list2.append([])
+        if len(model_list1) != 5 or len(model_list2) != 5:
+            raise FileNotFoundError('not enough model')
+        #print("loader")
+        eval_loader = DataLoader(graph_dataset(smiles, graph_dict), self.batch_size, collate_fn=null_collate,
+                                # num_workers=8,
+                                pin_memory=True, shuffle=False, worker_init_fn=np.random.seed(SEED))
+        
+        for num, model in enumerate(model_list1):
+            if self.gpu == 'gpu':
+                model.cuda()
+            model.eval()
+            
+            for b, (smiles, atom, bond, bond_index, mol_index,_) in enumerate(eval_loader):
+                #print(smiles)
+                if self.gpu == 'gpu':
+                    atom = atom.cuda()
+                    bond = bond.cuda()
+                    bond_index = bond_index.cuda()
+                    mol_index = mol_index.cuda()
+                mol_prediction = model(atom, bond, bond_index, mol_index)
+                if self.gpu == 'gpu':
+                    predict_list1[num].extend(mol_prediction.squeeze(dim=1).detach().cpu().numpy())
+                else:
+                    predict_list1[num].extend(mol_prediction.squeeze(dim=1).detach().numpy())
+        for num, model in enumerate(model_list2):
+            if self.gpu == 'gpu':
+                model.cuda()
+            model.eval()
+
+            for b, (smiles, atom, bond, bond_index, mol_index,_) in enumerate(eval_loader):
+                if self.gpu == 'gpu':
+                    atom = atom.cuda()
+                    bond = bond.cuda()
+                    bond_index = bond_index.cuda()
+                    mol_index = mol_index.cuda()
+                mol_prediction = model(atom, bond, bond_index, mol_index)
+                if self.gpu == 'gpu':
+                    predict_list2[num].extend(mol_prediction.squeeze(dim=1).detach().cpu().numpy())
+                else:
+                    predict_list2[num].extend(mol_prediction.squeeze(dim=1).detach().numpy())
+
+        score,score1,score2=[],[],[]
+        #print(predict_list1)
+        predict_list1 = softmax(predict_list1, dim=2)
+        #print(predict_list1)
+        predict_mean1 = np.array(predict_list1).sum(axis=0) / fold     ###classification
+        #print(predict_mean1)
+        score1=[float(score[1]) for score in predict_mean1]
+        predict_mean2 = np.array(predict_list2).sum(axis=0) / fold   ###regression
+        #print(predict_mean2)
+        score2=[float(score) for score in predict_mean2]
+        #print(score1)
+        #print(score2)
+        score=[0.5*score1[i]+0.5*score2[i]  for i in range(len(score1))]
+        for index in empty_index:
+            #print(index)
+            score.insert(index,'0.0')
+        #print(score)
+        
+
+        
+        #scores = [self.scoring_function(smile)[0] for smile in smiles]
+        # scores1 = [self.scoring_function(smile)[1] for smile in smiles]
+        # scores2 = [self.scoring_function(smile)[2] for smile in smiles]
+        return np.array(score, dtype=np.float32), np.array(score1, dtype=np.float32), np.array(score2, dtype=np.float32)
+        #return score, score1, score2
 
 def get_scoring_function(scoring_function, num_processes=None, **kwargs):
     """Function that initializes and returns a scoring function by name"""

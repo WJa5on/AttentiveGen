@@ -223,7 +223,7 @@ def read_data(filename):
     else:
         raise ValueError('unsupported file type ')
 
-    print('{} :{}'.format(filename, df.columns.values))
+    #print('{} :{}'.format(filename, df.columns.values))
     return df
 
 if __name__ == '__main__':
