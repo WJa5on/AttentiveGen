@@ -39,9 +39,9 @@ score_fig = figure(title="Scores", plot_width=600, plot_height=600)
 score_fig.line('x', 'y', legend='Average score', source=score_source)
 score_fig.line('x', 'y_mean', legend='Running average of average score', line_width=2, 
                color="firebrick", source=score_source)
-score_fig.line('x', 'y1_mean', legend='Average Score of similarity', line_width=2, 
+score_fig.line('x', 'y1_mean', legend='Running average of average score1', line_width=2, 
                color="skyblue", source=score_source)
-score_fig.line('x', 'y2_mean', legend='Average Score of activity', line_width=2, 
+score_fig.line('x', 'y2_mean', legend='Running average of average score2', line_width=2, 
                color="orange", source=score_source)
 
 score_fig.xaxis.axis_label = "Step"

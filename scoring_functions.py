@@ -855,12 +855,16 @@ class Singleprocessing():
         predict_mean1 = np.array(predict_list1).sum(axis=0) / fold     ###classification
         #print(predict_mean1)
         score1=[float(score[1]) for score in predict_mean1]
+        x = np.array(predict_list2, dtype=float)
+        #print(predict_list2)
+        predict_list2= np.exp(x)/(np.exp(x)+1)
+        #print(predict_list2)
         predict_mean2 = np.array(predict_list2).sum(axis=0) / fold   ###regression
         #print(predict_mean2)
         score2=[float(score) for score in predict_mean2]
         #print(score1)
         #print(score2)
-        score=[0.5*score1[i]+0.5*score2[i]  for i in range(len(score1))]
+        score=[0.9*score1[i]+0.1*score2[i]  for i in range(len(score1))]
         for index in empty_index:
             #print(index)
             score.insert(index,'0.0')
