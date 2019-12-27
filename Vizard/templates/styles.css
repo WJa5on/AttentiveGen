@@ -1,27 +1,31 @@
 html {
-    background-color: #2F2F2F;
+    background-color: "white";
     display: table;
     margin: auto;
+    border-color: white;
+    text-decoration-color: white;
 }
 
 body {
     display: table-cell;
     vertical-align: middle;
-    color: #fff;
+    color: black;
 }
 
 .img_outside {
     position: relative;
+    color: black;
 }
 
 .img_inside {
-    background-color: #EDEDED;
-    border: 7px solid #656565;
+    background-color: "white";
+    border: 7px solid "white";
     position:absolute;
     left:50% ;
     margin-left: -375px;
     top:50% ;
     margin-top: -250px;
+    color: black;
 }
 
 .score_fig{
@@ -31,7 +35,7 @@ body {
 
 h1 {
     margin: 0.5em 0 0.5em 0;
-    color: #fff;
+    color: black;
     font-family: 'Julius Sans One', sans-serif;
     font-size: 3em;
     text-transform: uppercase;
@@ -40,7 +44,7 @@ h1 {
 
 h2 {
     margin: 0 0 0 0;
-    color: #fff;
+    color: black;
     font-size: 20pt;
     text-align: center;
 }
