@@ -759,6 +759,8 @@ class Singleprocessing():
             return locals()[metric_name]
         smiles=[]
         empty_index=[]
+
+        ###check validity
         for i in range(len(smiles_0)):
             mol = Chem.MolFromSmiles(smiles_0[i])
             if mol:
@@ -773,16 +775,13 @@ class Singleprocessing():
                     empty_index.append(i)
             else:
                 empty_index.append(i)
-            
-            # mol = Chem.MolFromSmiles(smiles_0[i])
-            # if mol:
-            #     smiles.append(smiles_0[i])
-            # else:
-            #     empty_index.append(i)
+
         #print(smiles)
         #print(empty_index)
         self.param1.get_data()  #TODO : 待删除 修改utils中用json保存每个任务的type，labelclass等
         self.param2.get_data()
+        self.param3.get_data()
+        self.param4.get_data()
         del_smiles = Attentivefp.pre_data(smiles)
         predict_smiles = [smile for smile in smiles if smile not in del_smiles]
         #print(predict_smiles)
@@ -793,6 +792,10 @@ class Singleprocessing():
         predict_list1 = []
         model_list2 = []
         predict_list2 = []
+        model_list3 = []
+        predict_list3 = []
+        model_list4 = []
+        predict_list4 = []
         import json
         with open('{}/{}/lr_weight.json'.format(self.predict_path,self.param1.name), 'r') as f1:
             weight_dict1 = json.loads(f1.read())
@@ -802,12 +805,24 @@ class Singleprocessing():
             weight_dict2 = json.loads(f2.read())
             coef_2 = np.array(weight_dict2['coef_'])
             intercept_2 = np.array(weight_dict2['intercept_'])
+        with open('{}/{}/lr_weight.json'.format(self.predict_path,self.param3.name), 'r') as f3:
+            weight_dict3 = json.loads(f3.read())
+            coef_3 = np.array(weight_dict3['coef_'])
+            intercept_3 = np.array(weight_dict3['intercept_'])
+        with open('{}/{}/lr_weight.json'.format(self.predict_path,self.param4.name), 'r') as f4:
+            weight_dict4 = json.loads(f4.read())
+            coef_4 = np.array(weight_dict4['coef_'])
+            intercept_4 = np.array(weight_dict4['intercept_'])
         for i in range(fold):
             model_list1.append(torch.load('{}/{}/fold_{}.pt'.format(self.predict_path,self.param1.name, str(i),)))
             predict_list1.append([])
             model_list2.append(torch.load('{}/{}/fold_{}.pt'.format(self.predict_path,self.param2.name, str(i),)))
             predict_list2.append([])
-        if len(model_list1) != 5 or len(model_list2) != 5:
+            model_list3.append(torch.load('{}/{}/fold_{}.pt'.format(self.predict_path,self.param3.name, str(i),)))
+            predict_list3.append([])
+            model_list4.append(torch.load('{}/{}/fold_{}.pt'.format(self.predict_path,self.param4.name, str(i),)))
+            predict_list4.append([])
+        if len(model_list1) != 5 or len(model_list2) != 5 or len(model_list3) != 5 or len(model_list4) != 5:
             raise FileNotFoundError('not enough model')
         #print("loader")
         eval_loader = DataLoader(graph_dataset(smiles, graph_dict), self.batch_size, collate_fn=null_collate,
@@ -847,27 +862,80 @@ class Singleprocessing():
                     predict_list2[num].extend(mol_prediction.squeeze(dim=1).detach().cpu().numpy())
                 else:
                     predict_list2[num].extend(mol_prediction.squeeze(dim=1).detach().numpy())
+        for num, model in enumerate(model_list3):
+            if self.gpu == 'gpu':
+                model.cuda()
+            model.eval()
+            
+            for b, (smiles, atom, bond, bond_index, mol_index,_) in enumerate(eval_loader):
+                #print(smiles)
+                if self.gpu == 'gpu':
+                    atom = atom.cuda()
+                    bond = bond.cuda()
+                    bond_index = bond_index.cuda()
+                    mol_index = mol_index.cuda()
+                mol_prediction = model(atom, bond, bond_index, mol_index)
+                if self.gpu == 'gpu':
+                    predict_list3[num].extend(mol_prediction.squeeze(dim=1).detach().cpu().numpy())
+                else:
+                    predict_list3[num].extend(mol_prediction.squeeze(dim=1).detach().numpy())
+        for num, model in enumerate(model_list4):
+            if self.gpu == 'gpu':
+                model.cuda()
+            model.eval()
+            
+            for b, (smiles, atom, bond, bond_index, mol_index,_) in enumerate(eval_loader):
+                #print(smiles)
+                if self.gpu == 'gpu':
+                    atom = atom.cuda()
+                    bond = bond.cuda()
+                    bond_index = bond_index.cuda()
+                    mol_index = mol_index.cuda()
+                mol_prediction = model(atom, bond, bond_index, mol_index)
+                if self.gpu == 'gpu':
+                    predict_list4[num].extend(mol_prediction.squeeze(dim=1).detach().cpu().numpy())
+                else:
+                    predict_list4[num].extend(mol_prediction.squeeze(dim=1).detach().numpy())
 
-        score,score1,score2=[],[],[]
+
+        score,score1,score2,score3,score4=[],[],[],[],[]
         #print(predict_list1)
         predict_list1 = softmax(predict_list1, dim=2)
         #print(predict_list1)
-        predict_mean1 = np.array(predict_list1).sum(axis=0) / fold     ###classification
+        predict_mean1 = np.array(predict_list1).sum(axis=0) / fold     ###CB1 classification
         #print(predict_mean1)
         score1=[float(score[1]) for score in predict_mean1]
         x = np.array(predict_list2, dtype=float)
         #print(predict_list2)
-        predict_list2= np.exp(x)/(np.exp(x)+1)
+        predict_list2= np.sqrt(1/(np.square(x)+1))
         #print(predict_list2)
-        predict_mean2 = np.array(predict_list2).sum(axis=0) / fold   ###regression
+        predict_mean2 = np.array(predict_list2).sum(axis=0) / fold   ###solubility regression
         #print(predict_mean2)
         score2=[float(score) for score in predict_mean2]
         #print(score1)
         #print(score2)
-        score=[0.9*score1[i]+0.1*score2[i]  for i in range(len(score1))]
+
+
+        predict_list3 = softmax(predict_list3, dim=2)
+        predict_mean3 = np.array(predict_list3).sum(axis=0) / fold     ###BBB classification
+        score3=[float(score[1]) for score in predict_mean3]
+
+        predict_list4 = softmax(predict_list4, dim=2)
+        predict_mean4 = np.array(predict_list4).sum(axis=0) / fold     ###HERG classification
+        score4=[float(score[0]) for score in predict_mean4]
+
+
+
+        #score=['1' for i in range(len(score1))]
+        #score=[score1[i] for i in range(len(score1))]
+        score=[1.0*score1[i]+0.05*score2[i]+0.05*score3[i]+0.05*score4[i] for i in range(len(score1))]
         for index in empty_index:
             #print(index)
             score.insert(index,'0.0')
+            score1.insert(index,'0.0')
+            score2.insert(index,'0.0')
+            score3.insert(index,'0.0')
+            score4.insert(index,'0.0')
         #print(score)
         
 
@@ -875,7 +943,7 @@ class Singleprocessing():
         #scores = [self.scoring_function(smile)[0] for smile in smiles]
         # scores1 = [self.scoring_function(smile)[1] for smile in smiles]
         # scores2 = [self.scoring_function(smile)[2] for smile in smiles]
-        return np.array(score, dtype=np.float32), np.array(score1, dtype=np.float32), np.array(score2, dtype=np.float32)
+        return np.array(score, dtype=np.float32), np.array(score1, dtype=np.float32), np.array(score2, dtype=np.float32), np.array(score3, dtype=np.float32), np.array(score4, dtype=np.float32)
         #return score, score1, score2
 
 def get_scoring_function(scoring_function, num_processes=None, **kwargs):

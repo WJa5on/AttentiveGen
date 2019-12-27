@@ -64,7 +64,7 @@ def train_agent(restore_prior_from='data/Prior.ckpt',
     logger.log(Agent.rnn.gru_2.bias_hh.cpu().data.numpy(), "init_weight_GRU_layer_2_b_hh")
 
     # Information for the logger
-    step_score = [[], [], [], []]
+    step_score = [[], [], [], [],[],[]]
     # step_score1 = [[], []]
     # step_score2 = [[], []]
 
@@ -86,7 +86,7 @@ def train_agent(restore_prior_from='data/Prior.ckpt',
         smiles = seq_to_smiles(seqs, voc)
         #score, score1, score2 = scoring_function(smiles)
         #print(scoring_function(smiles))
-        score, score1, score2 = scoring_function(smiles)
+        score, score1, score2, score3, score4 = scoring_function(smiles)
 
         # Calculate augmented likelihood
         augmented_likelihood = prior_likelihood + sigma * Variable(score)
@@ -140,6 +140,8 @@ def train_agent(restore_prior_from='data/Prior.ckpt',
         step_score[1].append(np.mean(score))
         step_score[2].append(np.mean(score1))
         step_score[3].append(np.mean(score2))
+        step_score[4].append(np.mean(score3))
+        step_score[5].append(np.mean(score4))
 
         # step_score1[0].append(step + 1)
         # step_score1[1].append(np.mean(score1))
@@ -175,11 +177,11 @@ def train_agent(restore_prior_from='data/Prior.ckpt',
     prior_likelihood, _ = Prior.likelihood(Variable(seqs))
     prior_likelihood = prior_likelihood.data.cpu().numpy()
     smiles = seq_to_smiles(seqs, voc)
-    score, score1, score2 = scoring_function(smiles)
+    score, score1, score2, score3, score4 = scoring_function(smiles)
     with open(os.path.join(save_dir, "sampled"), 'w') as f:
         f.write("SMILES Score Score1 Score2 PriorLogP\n")
-        for smiles, score, score1, score2, prior_likelihood in zip(smiles, score, score1, score2, prior_likelihood):
-            f.write("{} {:5.2f} {:6.2f} {:6.2f} {:6.2f} \n".format(smiles, score, score1, score2, prior_likelihood))
+        for smiles, score, score1, score2, score3, score4, prior_likelihood in zip(smiles, score, score1, score2,score3,score4, prior_likelihood):
+            f.write("{} {:5.2f} {:6.2f} {:6.2f} {:6.2f} {:6.2f} {:6.2f} \n".format(smiles, score, score1, score2,score3,score4, prior_likelihood))
 
     # with open(os.path.join(save_dir, "sampled1024"), 'w') as f:
     #     f.write("SMILES Score Score1 Score2 PriorLogP\n")
